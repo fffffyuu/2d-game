@@ -1,0 +1,2052 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Techno's Adventure</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            background-color: #0b0c10;
+            color: #ffffff;
+            font-family: 'Courier New', Courier, monospace, sans-serif;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            max-width: 960px;
+            max-height: 540px;
+            aspect-ratio: 16 / 9;
+            background-color: #000;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), 0 0 15px rgba(31, 147, 255, 0.4);
+            border: 4px solid #1f2833;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: -webkit-crisp-edges;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            display: block;
+        }
+        /* Mobile Control Overlays (drawn directly on canvas handles touch, but CSS can assist if needed. 
+           In this implementation, the controls are rendered programmatically inside Canvas for consistent pixel art,
+           and touch coordinate mapping is perfectly handled.) */
+        #sound-toggle {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 36px;
+            height: 36px;
+            background: rgba(31, 40, 51, 0.8);
+            border: 2px solid #66fcf1;
+            border-radius: 50%;
+            color: #66fcf1;
+            font-weight: bold;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="sound-toggle">🔊</div>
+    <canvas id="gameCanvas" width="854" height="480"></canvas>
+</div>
+
+<script>
+// --- AUDIO SYSTEM (Web Audio API Synthesizer) ---
+class RetroAudio {
+    constructor() {
+        this.ctx = null;
+        this.muted = false;
+        this.tempo = 140;
+        this.currentLoopToken = null;
+    }
+
+    init() {
+        if (!this.ctx) {
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+    }
+
+    playOsc(freq, type, duration, vol = 0.3) {
+        if (this.muted) return;
+        this.init();
+        try {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+            gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start();
+            osc.stop(this.ctx.currentTime + duration);
+        } catch (e) {
+            console.log("Audio play error", e);
+        }
+    }
+
+    playJump() {
+        this.init();
+        if (this.muted) return;
+        try {
+            const now = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = "triangle";
+            osc.frequency.setValueAtTime(150, now);
+            osc.frequency.exponentialRampToValueAtTime(600, now + 0.15);
+            gain.gain.setValueAtTime(0.2, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start();
+            osc.stop(now + 0.15);
+        } catch (e) {}
+    }
+
+    playCoin() {
+        this.init();
+        if (this.muted) return;
+        try {
+            const now = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = "sine";
+            osc.frequency.setValueAtTime(987.77, now); // B5
+            osc.frequency.setValueAtTime(1318.51, now + 0.08); // E6
+            gain.gain.setValueAtTime(0.15, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start();
+            osc.stop(now + 0.25);
+        } catch (e) {}
+    }
+
+    playShoot() {
+        this.init();
+        if (this.muted) return;
+        try {
+            const now = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = "sawtooth";
+            osc.frequency.setValueAtTime(800, now);
+            osc.frequency.exponentialRampToValueAtTime(100, now + 0.12);
+            gain.gain.setValueAtTime(0.12, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start();
+            osc.stop(now + 0.12);
+        } catch(e) {}
+    }
+
+    playSword() {
+        this.init();
+        if (this.muted) return;
+        try {
+            const now = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = "triangle";
+            osc.frequency.setValueAtTime(400, now);
+            osc.frequency.exponentialRampToValueAtTime(100, now + 0.1);
+            gain.gain.setValueAtTime(0.25, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start();
+            osc.stop(now + 0.1);
+        } catch(e) {}
+    }
+
+    playHit() {
+        this.init();
+        if (this.muted) return;
+        try {
+            const now = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = "sawtooth";
+            osc.frequency.setValueAtTime(120, now);
+            osc.frequency.linearRampToValueAtTime(40, now + 0.15);
+            gain.gain.setValueAtTime(0.3, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start();
+            osc.stop(now + 0.15);
+        } catch (e) {}
+    }
+
+    playSquish() {
+        this.playOsc(120, "triangle", 0.15, 0.4);
+    }
+
+    playPowerUp() {
+        this.init();
+        if (this.muted) return;
+        try {
+            const now = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = "sine";
+            osc.frequency.setValueAtTime(440, now);
+            osc.frequency.setValueAtTime(554.37, now + 0.08);
+            osc.frequency.setValueAtTime(659.25, now + 0.16);
+            osc.frequency.setValueAtTime(880, now + 0.24);
+            gain.gain.setValueAtTime(0.2, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.45);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start();
+            osc.stop(now + 0.45);
+        } catch (e) {}
+    }
+
+    startMusic(level) {
+        this.stopMusic();
+        this.init();
+        if (this.muted) return;
+        
+        let notes = [];
+        if (level === 1) {
+            // Level 1: Energetic grass valley chiptune baseline
+            notes = [130.81, 130.81, 196.00, 130.81, 146.83, 146.83, 220.00, 146.83, 164.81, 164.81, 246.94, 164.81, 174.61, 196.00, 220.00, 246.94];
+        } else if (level === 2) {
+            // Level 2: Mysterious techno cave baseline
+            notes = [110.00, 110.00, 164.81, 110.00, 98.00, 98.00, 146.83, 98.00, 130.81, 130.81, 196.00, 130.81, 146.83, 164.81, 146.83, 130.81];
+        } else {
+            // Level 3: Intense, alarming boss battle baseline
+            notes = [87.31, 87.31, 87.31, 87.31, 98.00, 98.00, 98.00, 98.00, 110.00, 110.00, 130.81, 110.00, 123.47, 87.31, 98.00, 110.00];
+        }
+
+        let step = 0;
+        const interval = 220; // ms per beat
+        
+        const playStep = () => {
+            if (this.muted || !this.ctx) return;
+            try {
+                const now = this.ctx.currentTime;
+                // Bass synth
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = level === 3 ? "sawtooth" : "triangle";
+                osc.frequency.setValueAtTime(notes[step % notes.length], now);
+                gain.gain.setValueAtTime(0.08, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.2);
+
+                // Add melody on top every other beat on Level 3
+                if (level === 3 && step % 4 === 0) {
+                    const melOsc = this.ctx.createOscillator();
+                    const melGain = this.ctx.createGain();
+                    melOsc.type = "sine";
+                    melOsc.frequency.setValueAtTime(notes[step % notes.length] * 4, now);
+                    melGain.gain.setValueAtTime(0.04, now);
+                    melGain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+                    melOsc.connect(melGain);
+                    melGain.connect(this.ctx.destination);
+                    melOsc.start(now);
+                    melOsc.stop(now + 0.4);
+                }
+
+                step++;
+            } catch (e) {}
+        };
+
+        this.currentLoopToken = setInterval(playStep, interval);
+    }
+
+    stopMusic() {
+        if (this.currentLoopToken) {
+            clearInterval(this.currentLoopToken);
+            this.currentLoopToken = null;
+        }
+    }
+}
+
+const audio = new RetroAudio();
+
+// --- GAME CONFIG & STATES ---
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+const MUTE_BTN = document.getElementById("sound-toggle");
+MUTE_BTN.onclick = () => {
+    audio.muted = !audio.muted;
+    if (audio.muted) {
+        MUTE_BTN.innerText = "🔇";
+        audio.stopMusic();
+    } else {
+        MUTE_BTN.innerText = "🔊";
+        audio.init();
+        if (gameState.currentScreen === "playing") {
+            audio.startMusic(gameState.level);
+        }
+    }
+};
+
+const gameState = {
+    currentScreen: "start", // "start", "playing", "gameover", "victory"
+    level: 1,
+    maxLevel: 3,
+    coins: 0,
+    highScore: parseInt(localStorage.getItem("techno_high_score") || "0"),
+    bossDefeated: false,
+    screenShake: 0
+};
+
+// --- KEYS & CONTROLS ---
+const keys = {};
+window.addEventListener("keydown", (e) => {
+    keys[e.key] = true;
+    keys[e.code] = true;
+    audio.init();
+});
+window.addEventListener("keyup", (e) => {
+    keys[e.key] = false;
+    keys[e.code] = false;
+});
+
+// Touch UI & Interactive Mapping
+const touchState = {
+    left: false,
+    right: false,
+    jump: false,
+    attack: false
+};
+
+// Canvas touch coordinates mapping
+function getTouchPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    
+    const touches = [];
+    for (let i = 0; i < e.touches.length; i++) {
+        touches.push({
+            x: (e.touches[i].clientX - rect.left) * scaleX,
+            y: (e.touches[i].clientY - rect.top) * scaleY
+        });
+    }
+    return touches;
+}
+
+// Draw Touch Buttons inside canvas (always rendered for easy tablet/mobile emulator compatibility)
+const btnL = { x: 50, y: 410, r: 35 };
+const btnR = { x: 140, y: 410, r: 35 };
+const btnJump = { x: 790, y: 410, r: 35 };
+const btnAttack = { x: 700, y: 410, r: 35 };
+
+function updateTouchState(touchPositions) {
+    touchState.left = false;
+    touchState.right = false;
+    touchState.jump = false;
+    touchState.attack = false;
+    
+    for (const t of touchPositions) {
+        // Left
+        if (Math.hypot(t.x - btnL.x, t.y - btnL.y) < btnL.r + 15) touchState.left = true;
+        // Right
+        if (Math.hypot(t.x - btnR.x, t.y - btnR.y) < btnR.r + 15) touchState.right = true;
+        // Jump
+        if (Math.hypot(t.x - btnJump.x, t.y - btnJump.y) < btnJump.r + 15) touchState.jump = true;
+        // Attack
+        if (Math.hypot(t.x - btnAttack.x, t.y - btnAttack.y) < btnAttack.r + 15) touchState.attack = true;
+    }
+}
+
+// Mouse controls overlay mapping for desktop emulator testing clicking buttons (fallback)
+function handleMouseClick(e) {
+    audio.init();
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const mouseX = (e.clientX - rect.left) * scaleX;
+    const mouseY = (e.clientY - rect.top) * scaleY;
+
+    if (gameState.currentScreen === "start") {
+        // Start Game Button bounds
+        if (mouseX > 327 && mouseX < 527 && mouseY > 280 && mouseY < 340) {
+            startGame();
+        }
+    } else if (gameState.currentScreen === "gameover" || gameState.currentScreen === "victory") {
+        // Retry/Restart Button bounds
+        if (mouseX > 327 && mouseX < 527 && mouseY > 320 && mouseY < 380) {
+            startGame();
+        }
+    }
+}
+
+window.addEventListener("touchstart", (e) => {
+    e.preventDefault();
+    const touches = getTouchPos(e);
+    updateTouchState(touches);
+    
+    // Check Screen transitions via Touch
+    if (gameState.currentScreen === "start" || gameState.currentScreen === "gameover" || gameState.currentScreen === "victory") {
+        // Map touch to simple button bounds
+        const rect = canvas.getBoundingClientRect();
+        const tX = (e.touches[0].clientX - rect.left) * (canvas.width / rect.width);
+        const tY = (e.touches[0].clientY - rect.top) * (canvas.height / rect.height);
+        
+        if (gameState.currentScreen === "start" && tX > 327 && tX < 527 && tY > 280 && tY < 340) {
+            startGame();
+        } else if ((gameState.currentScreen === "gameover" || gameState.currentScreen === "victory") && tX > 327 && tX < 527 && tY > 320 && tY < 380) {
+            startGame();
+        }
+    }
+}, { passive: false });
+
+window.addEventListener("touchmove", (e) => {
+    e.preventDefault();
+    updateTouchState(getTouchPos(e));
+}, { passive: false });
+
+window.addEventListener("touchend", (e) => {
+    e.preventDefault();
+    updateTouchState(getTouchPos(e));
+}, { passive: false });
+
+canvas.addEventListener("mousedown", handleMouseClick);
+
+// --- PARTICLE EMITTER ---
+class Particle {
+    constructor(x, y, dx, dy, size, color, life, decay, isGravity = false) {
+        this.x = x;
+        this.y = y;
+        this.dx = dx;
+        this.dy = dy;
+        this.size = size;
+        this.color = color;
+        this.life = life;
+        this.decay = decay;
+        this.isGravity = isGravity;
+    }
+    update() {
+        this.x += this.dx;
+        this.y += this.dy;
+        if (this.isGravity) this.dy += 0.25;
+        this.life -= this.decay;
+    }
+    draw(cameraX) {
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x - cameraX, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+let particles = [];
+function spawnExplosion(x, y, color, count = 8, isGravity = true) {
+    for (let i = 0; i < count; i++) {
+        const speed = Math.random() * 4 + 1;
+        const angle = Math.random() * Math.PI * 2;
+        particles.push(new Particle(
+            x, y,
+            Math.cos(angle) * speed,
+            Math.sin(angle) * speed - (isGravity ? 2 : 0),
+            Math.random() * 4 + 2,
+            color,
+            1.0,
+            0.02 + Math.random() * 0.03,
+            isGravity
+        ));
+    }
+}
+
+// --- PROJECTILES ---
+class Projectile {
+    constructor(x, y, dir, isEnemy = false, speed = 8, size = 6, color = "#ff4d4d") {
+        this.x = x;
+        this.y = y;
+        this.vx = dir * speed;
+        this.vy = 0;
+        this.size = size;
+        this.isEnemy = isEnemy;
+        this.color = color;
+        this.active = true;
+    }
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        
+        // Spawn active trail particles
+        if (Math.random() < 0.4) {
+            particles.push(new Particle(this.x, this.y, (Math.random() - 0.5) * 1, (Math.random() - 0.5) * 1, this.size * 0.5, this.color, 0.8, 0.05));
+        }
+    }
+    draw(cameraX) {
+        ctx.beginPath();
+        ctx.arc(this.x - cameraX, this.y, this.size, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.shadowColor = this.color;
+        ctx.shadowBlur = 10;
+        ctx.fill();
+        ctx.shadowBlur = 0; // Reset
+    }
+}
+
+let projectiles = [];
+
+// --- PLAYER ---
+class Player {
+    constructor() {
+        this.width = 30;
+        this.height = 42;
+        this.reset();
+    }
+
+    reset() {
+        this.x = 80;
+        this.y = 300;
+        this.vx = 0;
+        this.vy = 0;
+        this.maxHealth = 4;
+        this.health = 4;
+        this.coins = 0;
+        this.hasFireball = false;
+        
+        // Ground specs & flip mechanics
+        this.grounded = false;
+        this.facingRight = true;
+        this.jumping = false;
+        
+        // Jump Flip Animation
+        this.flipAngle = 0;
+        this.isFlipping = false;
+        
+        // Sword swing attack properties
+        this.swordActive = false;
+        this.swordCooldown = 0;
+        this.swordTimer = 0;
+        this.swordArc = 0;
+        
+        // Fireball shooting limiters
+        this.fireballCooldown = 0;
+        
+        // Damage vulnerabilities
+        this.invulnerableTimer = 0;
+        this.visible = true;
+    }
+
+    takeDamage() {
+        if (this.invulnerableTimer > 0) return;
+        this.health--;
+        this.invulnerableTimer = 60; // 1 second of flashes
+        gameState.screenShake = 12;
+        audio.playHit();
+        
+        // Visual explosive splash of screen red tint elements
+        spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, "#ff3333", 10, true);
+        
+        if (this.health <= 0) {
+            triggerGameOver();
+        }
+    }
+
+    shootFireball() {
+        if (this.fireballCooldown > 0) return;
+        this.fireballCooldown = 15; // 4 shots a second max
+        audio.playShoot();
+        
+        const dir = this.facingRight ? 1 : -1;
+        const fireX = this.facingRight ? this.x + this.width + 5 : this.x - 15;
+        const fireY = this.y + this.height / 2;
+        projectiles.push(new Projectile(fireX, fireY, dir, false, 8, 6, "#ffbb00"));
+    }
+
+    performSwordSlash() {
+        if (this.swordCooldown > 0) return;
+        this.swordCooldown = 20;
+        this.swordActive = true;
+        this.swordTimer = 8; // length of swing animation frame duration
+        this.swordArc = 0;
+        audio.playSword();
+    }
+
+    update() {
+        // Damage timers decrementing
+        if (this.invulnerableTimer > 0) {
+            this.invulnerableTimer--;
+            this.visible = (this.invulnerableTimer % 6 < 3); // rapid sprite blinks
+        } else {
+            this.visible = true;
+        }
+
+        // Action cooldowns
+        if (this.swordCooldown > 0) this.swordCooldown--;
+        if (this.fireballCooldown > 0) this.fireballCooldown--;
+        
+        if (this.swordActive) {
+            this.swordTimer--;
+            this.swordArc += 0.25;
+            if (this.swordTimer <= 0) {
+                this.swordActive = false;
+            }
+        }
+
+        // Horizontal velocity check and controls integration
+        const moveSpeed = 5;
+        const jumpStrength = -11.5;
+        const gravity = 0.5;
+
+        // Reset walk/horizontal movements
+        let xInput = 0;
+        if (keys["ArrowLeft"] || keys["a"] || keys["KeyA"] || touchState.left) {
+            xInput = -1;
+            this.facingRight = false;
+        }
+        if (keys["ArrowRight"] || keys["d"] || keys["KeyD"] || touchState.right) {
+            xInput = 1;
+            this.facingRight = true;
+        }
+
+        this.vx = xInput * moveSpeed;
+
+        // Jump processing
+        const wantsJump = keys[" "] || keys["ArrowUp"] || keys["w"] || keys["KeyW"] || touchState.jump;
+        if (wantsJump && this.grounded) {
+            this.vy = jumpStrength;
+            this.grounded = false;
+            this.isFlipping = true;
+            this.flipAngle = 0;
+            audio.playJump();
+            // Jump dust particles
+            for(let i=0; i<4; i++){
+                particles.push(new Particle(this.x + this.width/2, this.y + this.height, (Math.random()-0.5)*3, -Math.random()*1, 3, "rgba(255,255,255,0.4)", 0.6, 0.05));
+            }
+        }
+
+        // Apply physical gravity parameters
+        this.vy += gravity;
+        if (this.vy > 12) this.vy = 12; // cap fall speed
+
+        this.x += this.vx;
+        this.y += this.vy;
+
+        // Perform rotation increment during leaps
+        if (this.isFlipping) {
+            // Flip 360 degrees progressively
+            const direction = this.facingRight ? 1 : -1;
+            this.flipAngle += direction * (360 / 25); // Complete transition over ~25 frames
+            if (Math.abs(this.flipAngle) >= 360) {
+                this.flipAngle = 0;
+                this.isFlipping = false;
+            }
+        }
+
+        // Combat triggering (Space is jump, 'F' or 'X' or Attack Button triggers combat)
+        const wantsAttack = keys["f"] || keys["KeyF"] || keys["x"] || keys["KeyX"] || touchState.attack;
+        if (wantsAttack) {
+            if (this.hasFireball) {
+                this.shootFireball();
+            } else {
+                this.performSwordSlash();
+            }
+        }
+    }
+
+    draw(cameraX) {
+        if (!this.visible) return;
+
+        ctx.save();
+        // Translate center node of player for rotation matrices to match flip mechanics perfectly
+        const cx = this.x + this.width / 2 - cameraX;
+        const cy = this.y + this.height / 2;
+        ctx.translate(cx, cy);
+        
+        if (this.isFlipping) {
+            ctx.rotate(this.flipAngle * Math.PI / 180);
+        }
+
+        // Draw Player Body (Mecha suit Cyberpunk hero)
+        const bodyColor = this.hasFireball ? "#e63946" : "#457b9d"; // Red suit if Fireball upgrade is active
+        const armorColor = this.hasFireball ? "#f1faee" : "#a8dadc";
+        const visorColor = "#66fcf1";
+
+        // Head/Helmet
+        ctx.fillStyle = armorColor;
+        ctx.fillRect(-12, -21, 24, 14);
+        // Visor glow
+        ctx.fillStyle = visorColor;
+        const visorOffset = this.facingRight ? 3 : -11;
+        ctx.fillRect(visorOffset, -17, 8, 4);
+
+        // Body / Armor suit segment
+        ctx.fillStyle = bodyColor;
+        ctx.fillRect(-15, -7, 30, 18);
+        ctx.fillStyle = armorColor;
+        ctx.fillRect(-10, -5, 20, 12);
+
+        // Legs
+        ctx.fillStyle = "#1d3557";
+        ctx.fillRect(-13, 11, 9, 10);
+        ctx.fillRect(4, 11, 9, 10);
+        // Boot cuffs
+        ctx.fillStyle = bodyColor;
+        ctx.fillRect(-14, 17, 11, 4);
+        ctx.fillRect(3, 17, 11, 4);
+
+        // Arms/Blaster
+        ctx.fillStyle = bodyColor;
+        if (this.facingRight) {
+            ctx.fillRect(-17, -4, 5, 10); // Left arm
+            ctx.fillRect(8, -4, 12, 8); // Right arm / weapon hand
+        } else {
+            ctx.fillRect(12, -4, 5, 10); // Right arm
+            ctx.fillRect(-20, -4, 12, 8); // Left blaster
+        }
+
+        ctx.restore();
+
+        // Draw Player Sword swing (Slash arc overlapping outside rotation)
+        if (this.swordActive) {
+            ctx.save();
+            ctx.translate(this.x + this.width / 2 - cameraX, this.y + this.height / 2);
+            
+            ctx.strokeStyle = "rgba(102, 252, 241, 0.85)";
+            ctx.shadowColor = "#66fcf1";
+            ctx.shadowBlur = 15;
+            ctx.lineWidth = 5;
+            ctx.lineCap = "round";
+            
+            ctx.beginPath();
+            if (this.facingRight) {
+                // Sweep right side half-moon arc
+                ctx.arc(10, 0, 32, -Math.PI/3, Math.PI/3);
+            } else {
+                // Sweep left side half-moon arc
+                ctx.arc(-10, 0, 32, 2*Math.PI/3, 4*Math.PI/3);
+            }
+            ctx.stroke();
+            ctx.restore();
+            ctx.shadowBlur = 0;
+        }
+    }
+
+    getBounds() {
+        return {
+            left: this.x,
+            right: this.x + this.width,
+            top: this.y,
+            bottom: this.y + this.height
+        };
+    }
+}
+
+const player = new Player();
+
+// --- POWER-UPS ---
+class PowerUp {
+    constructor(x, y, type = "fireball") {
+        this.x = x;
+        this.y = y;
+        this.width = 24;
+        this.height = 24;
+        this.type = type;
+        this.vy = -3; // bounce up upon spawning
+        this.vx = 1.2 * (Math.random() > 0.5 ? 1 : -1);
+        this.active = true;
+    }
+    update() {
+        // Gravity bounds bounce
+        this.vy += 0.3;
+        if (this.vy > 8) this.vy = 8;
+        
+        this.x += this.vx;
+        this.y += this.vy;
+
+        // Sparkle indicators
+        if (Math.random() < 0.15) {
+            particles.push(new Particle(this.x + 12, this.y + 12, (Math.random()-0.5)*2, -Math.random()*1, 3, "#ffd166", 0.8, 0.03));
+        }
+    }
+    draw(cameraX) {
+        ctx.fillStyle = "#ff4d4d";
+        ctx.shadowColor = "#ff0000";
+        ctx.shadowBlur = 10;
+        
+        ctx.save();
+        ctx.translate(this.x + 12 - cameraX, this.y + 12);
+        
+        // draw glowing fire potion flask style
+        ctx.beginPath();
+        ctx.moveTo(-6, -10);
+        ctx.lineTo(6, -10);
+        ctx.lineTo(6, -6);
+        ctx.lineTo(10, 6);
+        ctx.lineTo(-10, 6);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Liquid glow core
+        ctx.fillStyle = "#ffdd53";
+        ctx.beginPath();
+        ctx.arc(0, 2, 5, 0, Math.PI*2);
+        ctx.fill();
+        
+        ctx.restore();
+        ctx.shadowBlur = 0;
+    }
+}
+
+let powerUps = [];
+
+// --- CONTAINER BLOCKS ---
+class ContainerBlock {
+    constructor(x, y, content = "fireball") {
+        this.x = x;
+        this.y = y;
+        this.width = 32;
+        this.height = 32;
+        this.hit = false;
+        this.content = content;
+        this.bounceY = 0;
+    }
+    hitBlock() {
+        if (this.hit) return;
+        this.hit = true;
+        this.bounceY = -8;
+        audio.playPowerUp();
+        
+        // Dispense fireball power-up item
+        powerUps.push(new PowerUp(this.x + 4, this.y - 12, this.content));
+        
+        // Splash block splinters
+        for (let i = 0; i < 6; i++) {
+            particles.push(new Particle(this.x + 16, this.y + 16, (Math.random()-0.5)*4, -2 - Math.random()*2, 3.5, "#ffd166", 0.8, 0.04));
+        }
+    }
+    update() {
+        if (this.bounceY < 0) {
+            this.bounceY += 0.8;
+            if (this.bounceY >= 0) this.bounceY = 0;
+        }
+    }
+    draw(cameraX) {
+        const renderY = this.y + this.bounceY;
+        
+        // Cyber block casing
+        if (!this.hit) {
+            ctx.fillStyle = "#ffc048";
+            ctx.fillRect(this.x - cameraX, renderY, this.width, this.height);
+            
+            // Pulsing inner symbol "?"
+            ctx.fillStyle = "#ffffff";
+            ctx.font = "bold 16px Courier New";
+            ctx.textAlign = "center";
+            ctx.fillText("?", this.x + 16 - cameraX, renderY + 22);
+            
+            // Block border frame
+            ctx.strokeStyle = "#ff7979";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(this.x - cameraX, renderY, this.width, this.height);
+        } else {
+            // Already hit, turned steel grey
+            ctx.fillStyle = "#4b6584";
+            ctx.fillRect(this.x - cameraX, renderY, this.width, this.height);
+            ctx.strokeStyle = "#353b48";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(this.x - cameraX, renderY, this.width, this.height);
+            
+            // Rivets at corners
+            ctx.fillStyle = "#2f3640";
+            ctx.fillRect(this.x + 3 - cameraX, renderY + 3, 3, 3);
+            ctx.fillRect(this.x + 26 - cameraX, renderY + 3, 3, 3);
+            ctx.fillRect(this.x + 3 - cameraX, renderY + 26, 3, 3);
+            ctx.fillRect(this.x + 26 - cameraX, renderY + 26, 3, 3);
+        }
+    }
+}
+
+let containers = [];
+
+// --- ENEMIES & HAZARDS ---
+class Enemy {
+    constructor(x, y, type = "grunt") {
+        this.x = x;
+        this.y = y;
+        this.type = type; // "grunt", "aggressive", "boss"
+        this.vx = (type === "grunt") ? -1.5 : -1.0;
+        this.vy = 0;
+        this.width = (type === "boss") ? 80 : 32;
+        this.height = (type === "boss") ? 80 : 32;
+        this.health = (type === "boss") ? 15 : ((type === "aggressive") ? 2 : 1);
+        this.squished = false;
+        this.angry = false;
+        
+        // Boss specific combat variables
+        this.jumpCooldown = 120;
+        this.shootCooldown = 95;
+    }
+
+    takeDamage(dmg = 1) {
+        this.health -= dmg;
+        audio.playHit();
+        gameState.screenShake = 6;
+        
+        // Explosion splash particle feed
+        spawnExplosion(this.x + this.width / 2, this.y + this.height / 2, "#9b59b6", 6, true);
+        
+        if (this.health <= 0) {
+            this.squished = true;
+            if (this.type === "boss") {
+                gameState.bossDefeated = true;
+                // Spawn the ultimate reward: Diamond Play Button trophy!
+                rewardTrophy = new DiamondTrophy(this.x + 25, this.y + 20);
+                spawnExplosion(this.x + 40, this.y + 40, "#00d2d3", 40, true);
+            } else {
+                gameState.coins += 5; // Defeating enemies yields points
+            }
+        }
+    }
+
+    update() {
+        if (this.squished) return;
+
+        // Gravity integration
+        this.vy += 0.5;
+        this.y += this.vy;
+        
+        this.x += this.vx;
+
+        // Line-of-sight Check for "aggressive" hunter enemies
+        if (this.type === "aggressive") {
+            const range = 240;
+            const distanceX = player.x - this.x;
+            const distanceY = Math.abs(player.y - this.y);
+
+            if (distanceY < 80 && Math.abs(distanceX) < range) {
+                this.angry = true;
+                this.vx = (distanceX > 0) ? 3.0 : -3.0; // Charge rapidly
+                // red glowing alert trail particles
+                if (Math.random() < 0.2) {
+                    particles.push(new Particle(this.x + this.width/2, this.y + 5, (Math.random()-0.5)*1, -1, 3, "#eb4d4b", 0.6, 0.04));
+                }
+            } else {
+                this.angry = false;
+                if (Math.abs(this.vx) > 1.8) {
+                    this.vx = (this.vx > 0) ? 1.0 : -1.0; // revert pace
+                }
+            }
+        }
+
+        // BOSS REVOLUTION COMBAT ENGINE
+        if (this.type === "boss") {
+            const distToPlayer = player.x - this.x;
+            
+            // Face the player
+            if (Math.abs(distToPlayer) < 500) {
+                this.vx = (distToPlayer > 0) ? 0.8 : -0.8;
+            }
+
+            // Boss Shoots Blasts!
+            this.shootCooldown--;
+            if (this.shootCooldown <= 0) {
+                this.shootCooldown = 110 + Math.random() * 40;
+                audio.playShoot();
+                
+                // Shoot triple heavy energy spikes
+                const dir = (distToPlayer > 0) ? 1 : -1;
+                projectiles.push(new Projectile(this.x + 40, this.y + 20, dir, true, 5, 10, "#9b59b6"));
+                projectiles.push(new Projectile(this.x + 40, this.y + 20, dir, true, 4.5, 7, "#e056fd"));
+            }
+
+            // Boss high jumps to squash player
+            this.jumpCooldown--;
+            if (this.jumpCooldown <= 0 && Math.abs(this.vy) < 0.2) {
+                this.jumpCooldown = 140 + Math.random() * 80;
+                this.vy = -14; // heavy upward leap
+                audio.playJump();
+            }
+        }
+    }
+
+    draw(cameraX) {
+        if (this.squished) return;
+
+        ctx.save();
+        ctx.translate(this.x - cameraX, this.y);
+
+        if (this.type === "grunt") {
+            // Drawn Mushroom Style alien
+            ctx.fillStyle = "#eb4d4b";
+            ctx.beginPath();
+            ctx.arc(16, 12, 16, Math.PI, 0);
+            ctx.fill();
+
+            // Spots
+            ctx.fillStyle = "#ffffff";
+            ctx.beginPath();
+            ctx.arc(10, 8, 3, 0, Math.PI*2);
+            ctx.arc(22, 8, 3, 0, Math.PI*2);
+            ctx.fill();
+
+            // Stem body
+            ctx.fillStyle = "#f5cd79";
+            ctx.fillRect(10, 12, 12, 20);
+
+            // Angry cyber visor
+            ctx.fillStyle = "#111111";
+            ctx.fillRect(8, 14, 16, 4);
+            ctx.fillStyle = "#00d2d3";
+            ctx.fillRect(12, 15, 8, 2);
+
+        } else if (this.type === "aggressive") {
+            // Neon red plasma fiend
+            ctx.fillStyle = this.angry ? "#ff1d58" : "#9b59b6";
+            
+            // Spikes body
+            ctx.beginPath();
+            ctx.moveTo(16, 0);
+            ctx.lineTo(32, 24);
+            ctx.lineTo(24, 32);
+            ctx.lineTo(8, 32);
+            ctx.lineTo(0, 24);
+            ctx.closePath();
+            ctx.fill();
+
+            // Cyber visor plate
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(this.vx > 0 ? 18 : 6, 12, 8, 5);
+            ctx.fillStyle = this.angry ? "#00ff00" : "#eb4d4b";
+            ctx.fillRect(this.vx > 0 ? 21 : 9, 14, 3, 2);
+
+        } else if (this.type === "boss") {
+            // Cyber Boss Overlord Golem
+            ctx.fillStyle = "#ffd166";
+            ctx.shadowColor = "#f7d794";
+            ctx.shadowBlur = Math.sin(Date.now() / 100) * 10 + 10;
+            
+            // Giant main visor core
+            ctx.fillRect(10, 10, 60, 60);
+
+            // Steel shoulder plating and core
+            ctx.fillStyle = "#2d3436";
+            ctx.fillRect(0, 0, 80, 15);
+            ctx.fillRect(5, 70, 70, 10);
+            
+            // Side arms
+            ctx.fillStyle = "#303952";
+            ctx.fillRect(-12, 15, 12, 40);
+            ctx.fillRect(80, 15, 12, 40);
+
+            // Health percentage indicator plate
+            const hpWidth = (this.health / 15) * 60;
+            ctx.fillStyle = "rgba(0,0,0,0.5)";
+            ctx.fillRect(10, -15, 60, 6);
+            ctx.fillStyle = "#ff2e44";
+            ctx.fillRect(10, -15, hpWidth, 6);
+        }
+
+        ctx.restore();
+        ctx.shadowBlur = 0;
+    }
+
+    getBounds() {
+        return {
+            left: this.x,
+            right: this.x + this.width,
+            top: this.y,
+            bottom: this.y + this.height
+        };
+    }
+}
+
+let enemies = [];
+
+// --- COINS ---
+class Coin {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.width = 16;
+        this.height = 20;
+        this.active = true;
+        this.angle = Math.random() * Math.PI;
+    }
+    update() {
+        this.angle += 0.08; // dynamic spin speed
+    }
+    draw(cameraX) {
+        ctx.save();
+        ctx.translate(this.x + 8 - cameraX, this.y + 10);
+        
+        // Spin stretching width math
+        const scale = Math.sin(this.angle);
+        ctx.scale(scale, 1.0);
+        
+        ctx.fillStyle = "#f1c40f";
+        ctx.shadowColor = "#f39c12";
+        ctx.shadowBlur = 5;
+        
+        ctx.beginPath();
+        ctx.arc(0, 0, 8, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Inner detail ring
+        ctx.strokeStyle = "#e67e22";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(0, 0, 5, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.restore();
+        ctx.shadowBlur = 0;
+    }
+}
+
+let coins = [];
+
+// --- PLATFORM TERRAIN BLOCKS ---
+class Block {
+    constructor(x, y, w, h, isSpike = false, customColor = null) {
+        this.x = x;
+        this.y = y;
+        this.width = w;
+        this.height = h;
+        this.isSpike = isSpike;
+        this.color = customColor;
+    }
+    draw(cameraX) {
+        if (!this.isSpike) {
+            // Retro Block styling with textured beveling
+            ctx.fillStyle = this.color || "#0abde3";
+            ctx.fillRect(this.x - cameraX, this.y, this.width, this.height);
+            
+            // Top highlight
+            ctx.fillStyle = "rgba(255,255,255,0.25)";
+            ctx.fillRect(this.x - cameraX, this.y, this.width, 4);
+            
+            // Bottom shadow
+            ctx.fillStyle = "rgba(0,0,0,0.3)";
+            ctx.fillRect(this.x - cameraX, this.y + this.height - 4, this.width, 4);
+        } else {
+            // Harm spikes
+            ctx.fillStyle = "#ff6b6b";
+            const triangleWidth = 20;
+            const count = Math.ceil(this.width / triangleWidth);
+            
+            for (let i = 0; i < count; i++) {
+                const startX = this.x + (i * triangleWidth) - cameraX;
+                ctx.beginPath();
+                ctx.moveTo(startX, this.y + this.height);
+                ctx.lineTo(startX + triangleWidth/2, this.y);
+                ctx.lineTo(startX + triangleWidth, this.y + this.height);
+                ctx.closePath();
+                ctx.fill();
+            }
+        }
+    }
+}
+
+let terrain = [];
+
+// --- FINAL Boss Encounter Victory Trophy reward ---
+class DiamondTrophy {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.width = 32;
+        this.height = 36;
+        this.rotation = 0;
+    }
+    draw(cameraX) {
+        this.rotation += 0.04;
+        
+        ctx.save();
+        ctx.translate(this.x + 16 - cameraX, this.y + 18);
+        ctx.rotate(this.rotation);
+        
+        // Glowing Diamond trophy
+        ctx.fillStyle = "#66fcf1";
+        ctx.shadowColor = "#00d2d3";
+        ctx.shadowBlur = 20;
+        
+        // Shape of a Diamond Play Button Triangle Inside Badge
+        ctx.beginPath();
+        ctx.moveTo(0, -18);
+        ctx.lineTo(16, 0);
+        ctx.lineTo(0, 18);
+        ctx.lineTo(-16, 0);
+        ctx.closePath();
+        ctx.fill();
+
+        // Innermore glowing player symbol triangle
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.moveTo(-4, -6);
+        ctx.lineTo(6, 0);
+        ctx.lineTo(-4, 6);
+        ctx.closePath();
+        ctx.fill();
+        
+        ctx.restore();
+        ctx.shadowBlur = 0;
+    }
+}
+
+let rewardTrophy = null;
+
+// --- BUILD LEVELS ---
+function buildLevel(lvl) {
+    terrain = [];
+    enemies = [];
+    coins = [];
+    containers = [];
+    powerUps = [];
+    projectiles = [];
+    rewardTrophy = null;
+    gameState.bossDefeated = false;
+
+    if (lvl === 1) {
+        const platformColor = "#10ac84"; // Sunny Meadow theme
+        
+        // Flat spawn field
+        terrain.push(new Block(0, 420, 700, 60, false, platformColor));
+        
+        // Floating blocks
+        containers.push(new ContainerBlock(320, 280)); // Power up element
+        terrain.push(new Block(280, 280, 40, 32, false, platformColor));
+        terrain.push(new Block(352, 280, 40, 32, false, platformColor));
+        
+        // Coins over floating segments
+        coins.push(new Coin(330, 240));
+        coins.push(new Coin(290, 240));
+        coins.push(new Coin(362, 240));
+        
+        // Drop pit / Spike hazard
+        terrain.push(new Block(700, 440, 180, 40, true)); // Spikes pit
+        terrain.push(new Block(880, 420, 600, 60, false, platformColor));
+        
+        // High bridge floaters
+        terrain.push(new Block(980, 290, 160, 20, false, platformColor));
+        coins.push(new Coin(1010, 250));
+        coins.push(new Coin(1060, 250));
+        coins.push(new Coin(1110, 250));
+
+        // Patrolling enemies
+        enemies.push(new Enemy(500, 380, "grunt"));
+        enemies.push(new Enemy(1100, 380, "grunt"));
+        enemies.push(new Enemy(1350, 380, "aggressive")); // Aggressive stalker!
+        
+        // Floating steps towards finish node
+        terrain.push(new Block(1580, 320, 100, 20, false, platformColor));
+        terrain.push(new Block(1750, 240, 100, 20, false, platformColor));
+        containers.push(new ContainerBlock(1800, 140)); // extra reward Block query
+        
+        // End portal sector
+        terrain.push(new Block(1950, 420, 600, 60, false, platformColor));
+        coins.push(new Coin(2100, 380));
+        coins.push(new Coin(2150, 380));
+
+    } else if (lvl === 2) {
+        const platformColor = "#3c6382"; // Blue Night cavern ruins style
+        
+        // Base platforms and hazardous stepping spikes
+        terrain.push(new Block(0, 420, 500, 60, false, platformColor));
+        
+        // floating pillars
+        terrain.push(new Block(200, 290, 80, 20, false, platformColor));
+        containers.push(new ContainerBlock(224, 180));
+        
+        // Drop canyon of fire/metal spikes
+        terrain.push(new Block(500, 450, 250, 30, true)); // Spike floor
+        terrain.push(new Block(750, 420, 650, 60, false, platformColor));
+        
+        // Stepping stones over pit
+        terrain.push(new Block(520, 300, 40, 20, false, platformColor));
+        terrain.push(new Block(610, 220, 40, 20, false, platformColor));
+        terrain.push(new Block(700, 300, 40, 20, false, platformColor));
+        
+        coins.push(new Coin(530, 260));
+        coins.push(new Coin(621, 180));
+        coins.push(new Coin(710, 260));
+
+        // Midsection Patrol grunts & charge hunters
+        enemies.push(new Enemy(820, 380, "grunt"));
+        enemies.push(new Enemy(980, 380, "aggressive"));
+        enemies.push(new Enemy(1150, 380, "grunt"));
+        enemies.push(new Enemy(1300, 380, "aggressive"));
+
+        // Dangerous staircase section
+        terrain.push(new Block(1400, 450, 200, 30, true)); // another wide spikes barrier
+        terrain.push(new Block(1600, 420, 800, 60, false, platformColor));
+        
+        terrain.push(new Block(1620, 340, 120, 20, false, platformColor));
+        terrain.push(new Block(1780, 270, 120, 20, false, platformColor));
+        terrain.push(new Block(1940, 200, 120, 20, false, platformColor));
+        containers.push(new ContainerBlock(1980, 80)); // Power container backup
+
+        coins.push(new Coin(1670, 300));
+        coins.push(new Coin(1830, 230));
+        coins.push(new Coin(1990, 160));
+
+    } else if (lvl === 3) {
+        // Challenging Dungeon arena designed precisely for Boss Encounter
+        const platformColor = "#78281f"; // Inferno red Cyber Dungeon
+        
+        // Boundary closed arena structure (Width ~1200 max)
+        terrain.push(new Block(0, 420, 1100, 60, false, platformColor));
+        
+        // Solid vertical side barrier bounds to restrict run-aways
+        terrain.push(new Block(-20, 0, 20, 480, false, platformColor));
+        terrain.push(new Block(1080, 0, 30, 480, false, platformColor));
+
+        // Sparse floating steps to jump dodge projectiles
+        terrain.push(new Block(220, 280, 150, 20, false, platformColor));
+        terrain.push(new Block(710, 280, 150, 20, false, platformColor));
+        terrain.push(new Block(460, 180, 160, 20, false, platformColor));
+        
+        // Center reward power backup Block
+        containers.push(new ContainerBlock(525, 80));
+
+        // Spawning the Giga Boss at x=800
+        enemies.push(new Enemy(800, 330, "boss"));
+    }
+}
+
+// --- GAME LOOP SYSTEMS ---
+function startGame() {
+    gameState.currentScreen = "playing";
+    gameState.level = 1;
+    gameState.coins = 0;
+    player.reset();
+    buildLevel(gameState.level);
+    audio.startMusic(gameState.level);
+}
+
+function triggerGameOver() {
+    gameState.currentScreen = "gameover";
+    audio.stopMusic();
+    audio.playOsc(80, "sawtooth", 0.6, 0.5);
+}
+
+function checkNextLevel() {
+    if (gameState.level < gameState.maxLevel) {
+        gameState.level++;
+        buildLevel(gameState.level);
+        player.x = 80;
+        player.y = 300;
+        audio.startMusic(gameState.level);
+    } else {
+        // Beat maximum level, triggers on Victory Diamond collection!
+    }
+}
+
+// Screen boundary finish nodes (Level 1 and 2 end at x > 2300)
+function getLevelWidth() {
+    if (gameState.level === 1) return 2350;
+    if (gameState.level === 2) return 2350;
+    return 1080; // Arena is tight
+}
+
+// --- INTERSECTION RECTANGLE COLLISION TESTS ---
+function checkCollision(r1, r2) {
+    return (r1.left < r2.right &&
+            r1.right > r2.left &&
+            r1.top < r2.bottom &&
+            r1.bottom > r2.top);
+}
+
+function resolvePlatformCollisions() {
+    player.grounded = false;
+    const pBounds = player.getBounds();
+
+    for (const b of terrain) {
+        const bBounds = {
+            left: b.x,
+            right: b.x + b.width,
+            top: b.y,
+            bottom: b.y + b.height
+        };
+
+        if (checkCollision(pBounds, bBounds)) {
+            if (b.isSpike) {
+                player.takeDamage();
+                // bounce back safely
+                player.vy = -6;
+                player.vx = player.facingRight ? -4 : 4;
+                return;
+            }
+
+            // Detect collision axis by comparing depth penetrations
+            const overlapX = Math.min(pBounds.right - bBounds.left, bBounds.right - pBounds.left);
+            const overlapY = Math.min(pBounds.bottom - bBounds.top, bBounds.bottom - pBounds.top);
+
+            if (overlapX > overlapY) {
+                // Vertical resolution
+                if (player.vy > 0 && pBounds.bottom - player.vy <= bBounds.top + 2) {
+                    player.y -= overlapY;
+                    player.vy = 0;
+                    player.grounded = true;
+                } else if (player.vy < 0) {
+                    player.y += overlapY;
+                    player.vy = 0;
+                }
+            } else {
+                // Horizontal resolution
+                if (player.vx > 0) {
+                    player.x -= overlapX;
+                } else if (player.vx < 0) {
+                    player.x += overlapX;
+                }
+            }
+            // Sync bounds after corrections
+            pBounds.left = player.x;
+            pBounds.right = player.x + player.width;
+            pBounds.top = player.y;
+            pBounds.bottom = player.y + player.height;
+        }
+    }
+
+    // Resolve structural details for Container Blocks
+    for (const cb of containers) {
+        const cbBounds = {
+            left: cb.x,
+            right: cb.x + cb.width,
+            top: cb.y,
+            bottom: cb.y + cb.height
+        };
+
+        if (checkCollision(pBounds, cbBounds)) {
+            const overlapX = Math.min(pBounds.right - cbBounds.left, cbBounds.right - pBounds.left);
+            const overlapY = Math.min(pBounds.bottom - cbBounds.top, cbBounds.bottom - pBounds.top);
+
+            if (overlapX > overlapY) {
+                if (player.vy > 0 && pBounds.bottom - player.vy <= cbBounds.top + 2) {
+                    // Landed atop container block safely
+                    player.y -= overlapY;
+                    player.vy = 0;
+                    player.grounded = true;
+                } else if (player.vy < 0) {
+                    // Hit container block from underside triggers upgrade dispense!
+                    player.y += overlapY;
+                    player.vy = 0;
+                    cb.hitBlock();
+                }
+            } else {
+                if (player.vx > 0) player.x -= overlapX;
+                else if (player.vx < 0) player.x += overlapX;
+            }
+            
+            pBounds.left = player.x;
+            pBounds.right = player.x + player.width;
+            pBounds.top = player.y;
+            pBounds.bottom = player.y + player.height;
+        }
+    }
+}
+
+// --- UPDATE FRAME TICKS (Main Loop core) ---
+function update() {
+    if (gameState.currentScreen !== "playing") return;
+
+    // Apply screen Shake decrement
+    if (gameState.screenShake > 0) {
+        gameState.screenShake -= 0.5;
+    }
+
+    player.update();
+
+    // Check bottom fall limits (Pits of death)
+    if (player.y > 480) {
+        player.takeDamage();
+        player.y = 150;
+        player.x = Math.max(80, player.x - 180); // displace safely back
+        player.vy = 0;
+    }
+
+    // Update Projectiles
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+        const p = projectiles[i];
+        p.update();
+        
+        // Remove off-screen or wall bounded
+        if (p.x < cameraX - 50 || p.x > cameraX + 900) {
+            projectiles.splice(i, 1);
+            continue;
+        }
+
+        // Projectile collisions with terrain blocks
+        for (const b of terrain) {
+            if (!b.isSpike && p.x > b.x && p.x < b.x + b.width && p.y > b.y && p.y < b.y + b.height) {
+                p.active = false;
+                spawnExplosion(p.x, p.y, p.color, 4, false);
+            }
+        }
+    }
+    projectiles = projectiles.filter(p => p.active);
+
+    // Update Enemies
+    for (let i = enemies.length - 1; i >= 0; i--) {
+        const e = enemies[i];
+        e.update();
+
+        if (e.squished) {
+            enemies.splice(i, 1);
+            continue;
+        }
+
+        const eBounds = e.getBounds();
+        const pBounds = player.getBounds();
+
+        // Overlap test player vs enemy
+        if (checkCollision(pBounds, eBounds)) {
+            if (e.type !== "boss" && player.vy > 0 && pBounds.bottom - player.vy < eBounds.top + 16) {
+                // Landing directly on top of regular grunts/aliens squashes them
+                e.takeDamage();
+                player.vy = -8.5; // bounce jump action
+                audio.playSquish();
+            } else {
+                // Hurt player from side nodes
+                player.takeDamage();
+            }
+        }
+
+        // Sword swing attack intersections
+        if (player.swordActive) {
+            const attackRange = 45;
+            const swordBox = {
+                left: player.facingRight ? player.x + player.width : player.x - attackRange,
+                right: player.facingRight ? player.x + player.width + attackRange : player.x,
+                top: player.y,
+                bottom: player.y + player.height
+            };
+
+            if (checkCollision(swordBox, eBounds)) {
+                e.takeDamage(1.5); // high melee damage
+            }
+        }
+
+        // Projectiles vs Enemies
+        for (const proj of projectiles) {
+            if (!proj.isEnemy && proj.active) {
+                if (proj.x > e.x && proj.x < e.x + e.width && proj.y > e.y && proj.y < e.y + e.height) {
+                    proj.active = false;
+                    e.takeDamage(1); // Standard projectile damage
+                    spawnExplosion(proj.x, proj.y, "#ffbb00", 6, false);
+                }
+            }
+        }
+    }
+
+    // Projectiles vs Player
+    for (const proj of projectiles) {
+        if (proj.isEnemy && proj.active) {
+            const pBounds = player.getBounds();
+            if (proj.x > pBounds.left && proj.x < pBounds.right && proj.y > pBounds.top && proj.y < pBounds.bottom) {
+                proj.active = false;
+                player.takeDamage();
+                spawnExplosion(proj.x, proj.y, "#9b59b6", 12, true);
+            }
+        }
+    }
+
+    // Resolve Player map platforms physics
+    resolvePlatformCollisions();
+
+    // Update floating Container Blocks
+    containers.forEach(cb => cb.update());
+
+    // Update power up items
+    for (let i = powerUps.length - 1; i >= 0; i--) {
+        const pu = powerUps[i];
+        pu.update();
+
+        // Player collision
+        const pBounds = player.getBounds();
+        const puBounds = { left: pu.x, right: pu.x + pu.width, top: pu.y, bottom: pu.y + pu.height };
+        
+        if (checkCollision(pBounds, puBounds)) {
+            player.hasFireball = true;
+            pu.active = false;
+            audio.playPowerUp();
+            gameState.coins += 10;
+            spawnExplosion(pu.x + 12, pu.y + 12, "#ffdd53", 12, false);
+        }
+    }
+    powerUps = powerUps.filter(pu => pu.active);
+
+    // Update coins collection
+    for (let i = coins.length - 1; i >= 0; i--) {
+        const c = coins[i];
+        c.update();
+        
+        const pBounds = player.getBounds();
+        const cBounds = { left: c.x, right: c.x + c.width, top: c.y, bottom: c.y + c.height };
+
+        if (checkCollision(pBounds, cBounds)) {
+            c.active = false;
+            gameState.coins++;
+            audio.playCoin();
+            
+            // Spark splash
+            for(let j=0; j<4; j++) {
+                particles.push(new Particle(c.x + 8, c.y + 10, (Math.random()-0.5)*2, -Math.random()*1, 2, "#f1c40f", 0.6, 0.04));
+            }
+        }
+    }
+    coins = coins.filter(c => c.active);
+
+    // Reward Trophy trigger complete
+    if (rewardTrophy) {
+        const pBounds = player.getBounds();
+        const rBounds = {
+            left: rewardTrophy.x,
+            right: rewardTrophy.x + rewardTrophy.width,
+            top: rewardTrophy.y,
+            bottom: rewardTrophy.y + rewardTrophy.height
+        };
+
+        if (checkCollision(pBounds, rBounds)) {
+            // Victory trigger complete game!
+            gameState.currentScreen = "victory";
+            audio.stopMusic();
+            audio.playPowerUp();
+            
+            // Update Highscore
+            const currentPoints = gameState.coins * 10;
+            if (currentPoints > gameState.highScore) {
+                gameState.highScore = currentPoints;
+                localStorage.setItem("techno_high_score", currentPoints.toString());
+            }
+        }
+    }
+
+    // Update standard Particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const pt = particles[i];
+        pt.update();
+        if (pt.life <= 0) {
+            particles.splice(i, 1);
+        }
+    }
+
+    // Side Scrolling camera tracking smoothly with deadzone
+    const targetCam = player.x - 300;
+    cameraX += (targetCam - cameraX) * 0.1;
+    
+    // Bounds camera within level
+    const maxScroll = getLevelWidth() - 854;
+    if (cameraX < 0) cameraX = 0;
+    if (cameraX > maxScroll) cameraX = maxScroll;
+
+    // Progression gate checks
+    if (!gameState.bossDefeated && player.x > getLevelWidth() - 40) {
+        checkNextLevel();
+    }
+}
+
+let cameraX = 0;
+
+// --- RENDER SCREEN VISUALS ---
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.save();
+    // Screen shaking mechanics
+    if (gameState.screenShake > 0) {
+        const dx = (Math.random() - 0.5) * gameState.screenShake;
+        const dy = (Math.random() - 0.5) * gameState.screenShake;
+        ctx.translate(dx, dy);
+    }
+
+    if (gameState.currentScreen === "start") {
+        drawStartMenu();
+    } else if (gameState.currentScreen === "playing") {
+        drawGameplay();
+    } else if (gameState.currentScreen === "gameover") {
+        drawGameOverScreen();
+    } else if (gameState.currentScreen === "victory") {
+        drawVictoryScreen();
+    }
+
+    ctx.restore();
+}
+
+function drawStartMenu() {
+    // Dynamic Techno grid sunset background
+    const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    grad.addColorStop(0, "#0f2027");
+    grad.addColorStop(0.5, "#203a43");
+    grad.addColorStop(1, "#2c5364");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Glowing grids
+    ctx.strokeStyle = "rgba(102, 252, 241, 0.15)";
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < canvas.width; i += 40) {
+        ctx.beginPath();
+        ctx.moveTo(i, 0);
+        ctx.lineTo(i, canvas.height);
+        ctx.stroke();
+    }
+    for (let j = 0; j < canvas.height; j += 40) {
+        ctx.beginPath();
+        ctx.moveTo(0, j);
+        ctx.lineTo(canvas.width, j);
+        ctx.stroke();
+    }
+
+    // Title Title Design
+    ctx.shadowColor = "#66fcf1";
+    ctx.shadowBlur = 15;
+    ctx.fillStyle = "#66fcf1";
+    ctx.font = "bold 44px 'Courier New', Courier, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("TECHNO'S ADVENTURE", canvas.width/2, 170);
+    ctx.shadowBlur = 0;
+
+    // Subtitle instruction details
+    ctx.fillStyle = "#c5c6c7";
+    ctx.font = "14px 'Courier New', Courier, sans-serif";
+    ctx.fillText("A Retro Side-Scrolling Cyber Platformer Challenge", canvas.width/2, 210);
+
+    // Clickable Interactive Button
+    // Button coordinates center bounds (327 -> 527)
+    ctx.fillStyle = "#1f2833";
+    ctx.strokeStyle = "#66fcf1";
+    ctx.lineWidth = 3;
+    ctx.fillRect(327, 280, 200, 60);
+    ctx.strokeRect(327, 280, 200, 60);
+
+    ctx.fillStyle = "#66fcf1";
+    ctx.font = "bold 20px 'Courier New', Courier, sans-serif";
+    ctx.fillText("START GAME", canvas.width/2, 316);
+
+    // Instructions manual footer
+    ctx.fillStyle = "#888";
+    ctx.font = "12px 'Courier New', Courier, sans-serif";
+    ctx.fillText("Controls: A/D/Arrows = Move | Space = Jump (Backflip!) | F/X/Touch = Attack", canvas.width/2, 430);
+}
+
+function drawGameplay() {
+    // Gorgeous themed backgrounds with parallax layers
+    if (gameState.level === 1) {
+        // Soft green valleys and futuristic horizon
+        const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        grad.addColorStop(0, "#000a12");
+        grad.addColorStop(0.7, "#001f3f");
+        grad.addColorStop(1, "#3b5998");
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Draw parallax mountains
+        ctx.fillStyle = "rgba(4, 30, 66, 0.4)";
+        drawSymmetricHills(cameraX * 0.2, 180, 120);
+        ctx.fillStyle = "rgba(4, 30, 66, 0.8)";
+        drawSymmetricHills(cameraX * 0.5, 230, 80);
+
+    } else if (gameState.level === 2) {
+        // Neon Cavern / Techno Dark Blue Theme
+        const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        grad.addColorStop(0, "#080510");
+        grad.addColorStop(0.6, "#141526");
+        grad.addColorStop(1, "#1c1e36");
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Cyber grids
+        ctx.strokeStyle = "rgba(98, 71, 162, 0.1)";
+        ctx.lineWidth = 1;
+        for (let i = 0; i < canvas.width; i += 30) {
+            ctx.beginPath();
+            ctx.moveTo(i, 0);
+            ctx.lineTo(i, canvas.height);
+            ctx.stroke();
+        }
+
+    } else if (gameState.level === 3) {
+        // Final Arena Battle Inferno
+        const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        grad.addColorStop(0, "#0b0000");
+        grad.addColorStop(0.5, "#2d0000");
+        grad.addColorStop(1, "#4a0e17");
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Glowing magma grids
+        ctx.strokeStyle = "rgba(255, 76, 76, 0.15)";
+        ctx.lineWidth = 2;
+        for (let j = 0; j < canvas.height; j += 40) {
+            ctx.beginPath();
+            ctx.moveTo(0, j);
+            ctx.lineTo(canvas.width, j);
+            ctx.stroke();
+        }
+    }
+
+    // Draw active world components
+    terrain.forEach(b => b.draw(cameraX));
+    containers.forEach(cb => cb.draw(cameraX));
+    powerUps.forEach(pu => pu.draw(cameraX));
+    coins.forEach(c => c.draw(cameraX));
+    enemies.forEach(e => e.draw(cameraX));
+    projectiles.forEach(p => p.draw(cameraX));
+    particles.forEach(pt => pt.draw(cameraX));
+
+    if (rewardTrophy) {
+        rewardTrophy.draw(cameraX);
+    }
+
+    // Draw Player Always
+    player.draw(cameraX);
+
+    // HUD overlays
+    drawHUD();
+    
+    // Virtual touch control on-screen panel (arcade glowing transparent buttons)
+    drawOnScreenButtons();
+}
+
+function drawSymmetricHills(scroll, baseHeight, stretch) {
+    ctx.beginPath();
+    ctx.moveTo(0, canvas.height);
+    for (let x = 0; x <= canvas.width + 50; x += 50) {
+        const hY = baseHeight + Math.sin((x + scroll) / stretch) * 40;
+        ctx.lineTo(x, hY);
+    }
+    ctx.lineTo(canvas.width, canvas.height);
+    ctx.closePath();
+    ctx.fill();
+}
+
+function drawHUD() {
+    ctx.save();
+    
+    // Top-left displays Level Tracker, Hearts, Coins, High Score, Active Power-up indicator
+    // Draw Dark HUD glass backing bar
+    ctx.fillStyle = "rgba(20, 24, 33, 0.85)";
+    ctx.strokeStyle = "#1f2833";
+    ctx.lineWidth = 2;
+    ctx.fillRect(10, 10, 310, 85);
+    ctx.strokeRect(10, 10, 310, 85);
+
+    // 1. Level Tracker
+    ctx.fillStyle = "#66fcf1";
+    ctx.font = "bold 13px 'Courier New', Courier, sans-serif";
+    ctx.fillText(`STAGE: LEVEL ${gameState.level} / ${gameState.maxLevel}`, 20, 30);
+
+    // 2. Health Points (Heart Icons represented beautifully)
+    ctx.fillStyle = "#ff4d4d";
+    ctx.fillText("HEALTH: ", 20, 52);
+    for (let i = 0; i < player.maxHealth; i++) {
+        const heartX = 78 + (i * 18);
+        const heartY = 43;
+        if (i < player.health) {
+            // Drawn full Red Heart
+            ctx.beginPath();
+            ctx.moveTo(heartX + 8, heartY + 3);
+            ctx.bezierCurveTo(heartX + 8, heartY, heartX + 2, heartY, heartX + 2, heartY + 4);
+            ctx.bezierCurveTo(heartX + 2, heartY + 8, heartX + 8, heartY + 11, heartX + 8, heartY + 13);
+            ctx.bezierCurveTo(heartX + 8, heartY + 11, heartX + 14, heartY + 8, heartX + 14, heartY + 4);
+            ctx.bezierCurveTo(heartX + 14, heartY, heartX + 8, heartY, heartX + 8, heartY + 3);
+            ctx.fill();
+        } else {
+            // Empty Grey Heart
+            ctx.strokeStyle = "#444";
+            ctx.strokeRect(heartX, heartY, 14, 12);
+        }
+    }
+
+    // 3. Coin tracker & High Score
+    ctx.fillStyle = "#f1c40f";
+    ctx.fillText(`COINS : ${gameState.coins}`, 20, 75);
+    
+    const scoreVal = gameState.coins * 10;
+    ctx.fillStyle = "#95a5a6";
+    ctx.fillText(`HI-SCORE: ${Math.max(gameState.highScore, scoreVal)}`, 160, 30);
+
+    // 4. Power-up status symbol container
+    ctx.fillStyle = "#1abc9c";
+    const powerStr = player.hasFireball ? "FIRE BLASTER CORE" : "MELEE BLADE ACTIVE";
+    ctx.fillStyle = player.hasFireball ? "#e74c3c" : "#3498db";
+    ctx.fillText(`PWR TYPE: ${powerStr}`, 130, 52);
+
+    ctx.restore();
+}
+
+function drawOnScreenButtons() {
+    // Only draw and render virtual controls for mobile responsiveness overlays
+    ctx.save();
+    ctx.globalAlpha = 0.45;
+    ctx.lineWidth = 3;
+
+    // Movement: Left Button
+    ctx.fillStyle = touchState.left ? "#66fcf1" : "#1f2833";
+    ctx.strokeStyle = "#66fcf1";
+    ctx.beginPath();
+    ctx.arc(btnL.x, btnL.y, btnL.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // draw cursor sign arrow left
+    ctx.fillStyle = "#fff";
+    drawTextArrow(btnL.x, btnL.y, "<");
+
+    // Movement: Right Button
+    ctx.fillStyle = touchState.right ? "#66fcf1" : "#1f2833";
+    ctx.beginPath();
+    ctx.arc(btnR.x, btnR.y, btnR.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    drawTextArrow(btnR.x, btnR.y, ">");
+
+    // Action: Jump Space (A button glow)
+    ctx.fillStyle = touchState.jump ? "#66fcf1" : "#1f2833";
+    ctx.strokeStyle = "#66fcf1";
+    ctx.beginPath();
+    ctx.arc(btnJump.x, btnJump.y, btnJump.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    drawTextArrow(btnJump.x, btnJump.y, "JMP");
+
+    // Action: Combat Slash/Fireball (B button red glow)
+    ctx.fillStyle = touchState.attack ? "#ff4d4d" : "#1f2833";
+    ctx.strokeStyle = "#ff4d4d";
+    ctx.beginPath();
+    ctx.arc(btnAttack.x, btnAttack.y, btnAttack.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    drawTextArrow(btnAttack.x, btnAttack.y, "ATK");
+
+    ctx.restore();
+}
+
+function drawTextArrow(x, y, txt) {
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 18px 'Courier New', sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(txt, x, y);
+}
+
+function drawGameOverScreen() {
+    ctx.fillStyle = "rgba(0, 0, 0, 0.85)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = "#ff2e44";
+    ctx.font = "bold 48px 'Courier New', Courier, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("GAME OVER", canvas.width/2, 180);
+
+    ctx.fillStyle = "#888";
+    ctx.font = "16px 'Courier New', sans-serif";
+    ctx.fillText("Techno fell in battle inside stage ruins...", canvas.width/2, 230);
+
+    // Simple clickable restart
+    ctx.fillStyle = "#1f2833";
+    ctx.strokeStyle = "#ff2e44";
+    ctx.lineWidth = 3;
+    ctx.fillRect(327, 320, 200, 60);
+    ctx.strokeRect(327, 320, 200, 60);
+
+    ctx.fillStyle = "#ff2e44";
+    ctx.font = "bold 18px 'Courier New', sans-serif";
+    ctx.fillText("TRY AGAIN", canvas.width/2, 356);
+}
+
+function drawVictoryScreen() {
+    ctx.fillStyle = "rgba(11, 12, 16, 0.9)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Glowing cosmic spotlights
+    const grad = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 20, canvas.width/2, canvas.height/2, 250);
+    grad.addColorStop(0, "rgba(102, 252, 241, 0.25)");
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Glowing Play button trophy rendering at center top
+    ctx.save();
+    ctx.translate(canvas.width / 2, 110);
+    ctx.shadowColor = "#66fcf1";
+    ctx.shadowBlur = 25;
+    ctx.fillStyle = "#66fcf1";
+    ctx.beginPath();
+    ctx.moveTo(0, -25);
+    ctx.lineTo(24, 0);
+    ctx.lineTo(0, 25);
+    ctx.lineTo(-24, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.moveTo(-6, -8);
+    ctx.lineTo(8, 0);
+    ctx.lineTo(-6, 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    // Text completed
+    ctx.fillStyle = "#66fcf1";
+    ctx.font = "bold 38px 'Courier New', Courier, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("GAME COMPLETED!", canvas.width/2, 190);
+
+    ctx.fillStyle = "#c5c6c7";
+    ctx.font = "15px 'Courier New', sans-serif";
+    ctx.fillText("You defeated the level 3 boss & claimed the Platinum Trophy!", canvas.width/2, 230);
+
+    ctx.fillStyle = "#f1c40f";
+    ctx.font = "bold 20px 'Courier New', sans-serif";
+    ctx.fillText(`FINAL COINS SECURED: ${gameState.coins}`, canvas.width/2, 270);
+
+    // Interactive button restart
+    ctx.fillStyle = "#1f2833";
+    ctx.strokeStyle = "#66fcf1";
+    ctx.lineWidth = 3;
+    ctx.fillRect(327, 320, 200, 60);
+    ctx.strokeRect(327, 320, 200, 60);
+
+    ctx.fillStyle = "#66fcf1";
+    ctx.font = "bold 18px 'Courier New', sans-serif";
+    ctx.fillText("PLAY AGAIN", canvas.width/2, 356);
+}
+
+// --- CORE LOOPER TICK INTERFACE ---
+let lastTime = 0;
+function loop(timestamp) {
+    update();
+    draw();
+    requestAnimationFrame(loop);
+}
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Glowing Background Diagonal Sword -->
+    <path
+        android:strokeColor="#8066fcf1"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:pathData="M24,84 L80,28" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M24,84 L80,28" />
+    
+    <!-- Sword Cross-hilt -->
+    <path
+        android:strokeColor="#ffd166"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M21,75 L33,87" />
+
+    <!-- Classic Gamepad base capsule (Main Body) -->
+    <path
+        android:fillColor="#1f2833"
+        android:strokeColor="#66fcf1"
+        android:strokeWidth="2.5"
+        android:pathData="M 28,40 h 52 a 12,12 0 0 1 12,12 v 16 a 12,12 0 0 1 -12,12 h -52 a 12,12 0 0 1 -12,-12 v -16 a 12,12 0 0 1 12,-12 z" />
+
+    <!-- D-Pad outline Left -->
+    <path
+        android:fillColor="#457b9d"
+        android:pathData="M32,56h-5v-4h5v-5h4v5h5v4h-5v5h-4z" />
+
+    <!-- Twin Action Buttons Right -->
+    <path
+        android:fillColor="#ff4d4d"
+        android:pathData="M76,54m-4,0a4,4 0 1,1 8,0a4,4 0 1,1 -8,0" />
+    <path
+        android:fillColor="#ffd166"
+        android:pathData="M66,62m-4,0a4,4 0 1,1 8,0a4,4 0 1,1 -8,0" />
+
+</vector>

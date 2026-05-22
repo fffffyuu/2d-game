@@ -1,0 +1,6 @@
+{
+  "name": "Techno's Adventure",
+  "description": "A high-octane 2D retro action-adventure side-scrolling platformer with chiptune synths, upgrades, and a dramatic final boss battle.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
